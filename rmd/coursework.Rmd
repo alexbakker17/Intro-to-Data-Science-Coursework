@@ -1,0 +1,461 @@
+---
+title: "Introduction to Data Science Coursework"
+subtitle: "Using Washington DC Capital Bikeshare (CaBi) Data" 
+output:
+  html_document:
+    df_print: paged
+    toc: true
+    toc_depth: 2
+    number_sections: false
+editor_options:
+  chunk_output_type: console
+---
+
+```{r setup, include = FALSE}
+
+knitr::opts_chunk$set(
+  comment = "",
+  results = "hold",
+  echo = FALSE,
+  message = FALSE,
+  warning = FALSE,
+  fig.width = 10,
+  fig.height = 6,
+  fig.align = "center"
+)  
+
+```
+
+```{r}
+
+library("tidyverse")
+library("here")
+library("janitor")
+library("lubridate")
+library("gghighlight")
+library("mapproj")
+
+theme_set(theme_classic())
+
+```
+
+# Introduction
+
+Across the globe, large cities are home to numerous modes of transport. These include trains, cars, buses, etc. Although many of these modes of transport are the daily norm for the commuting public, they can be very costly to the environment and to one’s own pocket. For example, using personal vehicles (such as cars) adds to the already very congested roads and increases the ever-growing air pollution. In addition, using public transport (such as tubes or trains) can be very costly, especially in the UK!
+
+For these reasons, public bike share (PBS) schemes have been implemented in countless large cities all over the world. They offer an alternative mode of transport around large cities, mainly targeting shorter-distance trips. PBS schemes have been very successful as they are a cost effective alternative, they allow users to engage in exercise and they are much more sustainable.
+
+Therefore, studying PBS schemes is crucial as it allows local governing bodies to identify the efficacy of their scheme. Additionally, analysing the data collected from a scheme helps highlight any user trends. This allows improvements to be made that are tailored to the public and how they use the scheme. 
+
+This report focuses on data collected from a PBS scheme used in the Washington DC.
+
+
+# Data
+
+The data to be analysed in this report is about bike rides undertaken by users of Capital Bikeshare (CaBi), a PBS scheme in Washington DC. The data consists of all the rides undertaken in 2019 and 2020 and was taken from this website: https://ride.capitalbikeshare.com/system-data
+
+```{r}
+
+# This code chunk cleans the raw data set into clean column names and correct
+# column types to make the data easier to work with.
+
+untidy_rides_data <- read_csv(
+  here("data", "rides_2019_2020_extract.csv"), 
+  na = "N/A")
+
+rides_data <- untidy_rides_data %>% 
+  clean_names %>% 
+  rename(member_type = member_casual, bike_type = rideable_type) %>%
+  select(!duration) %>% 
+  mutate(duration = as.duration(end_date - start_date),
+         .before = start_date) %>%
+  filter(duration > 60 & duration < 1800) %>% 
+  mutate(across(c(start_station_id:bike_type), parse_factor)) %>% 
+  mutate(across(c(start_lat:end_lng), parse_double)) %>% 
+  mutate(is_equity = parse_logical(is_equity, na = c("NA"))) %>% 
+  mutate(member_type = replace(member_type, 
+                               member_type == "Member", "member")) %>% 
+  mutate(member_type = replace(member_type, 
+                                 member_type == "Casual", "casual")) %>% 
+  select(-start_station_id, -end_station_id, -bike_number,
+         -ride_id, -bike_type, -is_equity)
+
+```
+
+
+## Clean Data
+
+Initially the data was cleaned into the following columns:
+
+* **Duration** – type: duration, indicates the duration of ride (a calculated column: End Date – Start Date)
+* **Start Date** – type: datetime, indicates the start date and time
+* **End Date** – type: datetime, indicates the start date and time
+* **Start Station Name** – type: factor, indicates the starting station name
+* **End Station Name** – type: factor, indicates the ending station name 
+* **Member Type** – type: factor, indicates the member type (member or casual)
+  * member (Annual Member, 30-Day Member or Day Key Member)
+  * casual (Single Trip, 24-Hour Pass, 3-Day Pass or 5-Day Pass)
+* **Start Latitude** – type: double, indicates the starting latitude
+* **Start Longitude** – type: double, indicates the starting longitude
+* **End Latitude** – type: double, indicates the ending latitude
+* **End Longitude** – type: double, indicates the ending longitude
+
+
+## Excluded Data
+
+* **Negative durations** - as these are impossible and therefore incorrect
+* **Durations that were < 60 seconds** – as on the website these were stated as “potentially false starts or users trying to re-dock a bike to ensure it’s secure”
+* **Durations that were > 30 minutes** – as until 2021 members could take unlimited rides of durations shorter than 30 minutes
+
+
+The following variables were excluded from the data set as they were not used or considered in any analysis:
+
+* **Start Station ID**
+* **End Station ID**
+* **Bike Number**
+* **Ride ID**
+* **Bike Type**
+* **Is Equity**
+
+# Questions
+
+In this report, we will investigate the following questions.
+
+
+## Question 1
+
+*Which stations are the busiest?*
+
+To operationalise this question, the variable we will focus on is the total number of departures. We will also specify the top five busiest starting stations. The departures included in this question will be from both years (2019 and 2020). Therefore the operationalised question becomes: 
+
+**Which five CaBi stations in Washington DC had the highest number of departures between 2019 and 2020?**
+
+
+## Question 2
+
+*When do CaBi users tend to ride?*
+
+To operationalise this question, the variable we will focus on is the average number of rides. The time frame we will specify is the hours of the day (0 - 23 hours). The rides included in this question will be from both years (2019 and 2020). Finally we will also distinguish between members and casual users. Therefore the operationalised question becomes: 
+
+**Did the type of membership affect when CaBi users tended to ride, on average, across a day between 2019 & 2020?**
+
+
+## Question 3
+
+*Does the month of the year affect how long people ride for?*
+
+To operationalise this question, the variable we will focus on is the average duration of a ride. The time frame we will specify is the hours of the day (0 - 23 hours). The rides included in this question will be from both years (2019 and 2020). Finally we will also distinguish between months of the year. Therefore the operationalised question becomes: 
+
+**Did CaBi users, on average, increase the duration they rode for, across a day, depending on the month of the year between 2019 and 2020?**
+
+
+## Question 4
+
+*Did the first COVID-19 lockdown lower the use of CaBi bikes?*
+
+To operationalise this question, the variable we will focus on is the total number of rides. The time frame we will specify is the months of the year. Finally we will also distinguish between each year as the first COVID-19 lockdown happened in 2020. Therefore the operationalised question becomes: 
+
+**Did the first COVID-19 lockdown lower the use of CaBi bikes across the year 2020 compared with 2019?**
+
+
+## Question 5
+
+*Does starting location affect the duration of the journey?*
+
+To operationalise this question, the variables we will focus on are start latitude and start longitude. The rides included in this question will be from both years (2019 and 2020) and will be focused on members as this ensures that ride duration is limited between 1 and 30 minutes. Finally we will distinguish by the duration of the ride. Therefore the operationalised question becomes: 
+
+**Did the starting location (starting latitude and longitude) of CaBi users affect the duration of their journeys between 2019 and 2020?**
+
+
+# Analysis
+
+
+## Answer to Question 1
+
+**Which five CaBi stations in Washington DC had the highest number of departures between 2019 and 2020?**
+
+The figure below identifies the five busiest departure stations. This insight could be used by the local governing body to inform them where to deploy more bikes and also where to install more bike docking stations. It also indicates where the highest bike congestion areas could be. This suggests that the infrastructure for bike riding in and around these stations should reflect this.
+
+```{r}
+
+# bar graph of top five departure stations 
+rides_data %>%
+  filter(start_station_name == "Columbus Circle / Union Station" | 
+         start_station_name == "New Hampshire Ave & T St NW" |
+         start_station_name == "15th & P St NW" |
+         start_station_name == "14th & Irving St NW" |
+         start_station_name == "1st & M St NE") %>%  
+  group_by(start_station_name) %>% 
+  summarise(no_of_rides = n()) %>% 
+  slice_max(order_by = no_of_rides, n = 5) %>% 
+  ggplot(mapping = aes(x = reorder(start_station_name, -no_of_rides), 
+                       y = no_of_rides)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 90),
+        plot.title = element_text(hjust = 0.5)) +
+  labs(title = "Top Five Busiest CaBi Stations in 2019 & 2020",
+       x = "Station Name",
+       y = "Total No. of Departures")
+  
+```
+
+
+## Answer to Question 2
+
+**Did the type of membership affect when CaBi users tended to ride, on average, across a day between 2019 & 2020?**
+
+The first figure below displays the trend for rides per hour, for all users. The second figure below displays the trend for rides per hour, divided into members and casual users. As you can see the second figure displays a huge difference in the trends for members and casual users. In the first plot this insight is completely hidden. This reinforces the need for the different membership schemes. The members trend tells us that they used the bikes to commute to work and to get around the city on a daily basis. This is because there are two peaks (one for each rush hour) and also their average number of rides is clearly much greater than the casual users. The casual users trend tells us that their use increased as the day went on and peaked in the early evening. Overall this figure has also identified when the busiest periods of the day were and this could inform when more policing should happen.
+
+```{r}
+
+# creates a new tibble that includes a column that rounds the start time of each ride to the nearest hour of the day
+rides_data_hours <- rides_data %>%
+  select(start_date, member_type) %>% 
+  mutate(start_hour = as.integer(format(start_date, "%H")))
+
+days_in_a_year <- 365
+
+# line graph of average number of rides across a day
+rides_data_hours %>%
+  group_by(start_hour) %>% 
+  summarise(no_of_rides = n()/(2*days_in_a_year)) %>% 
+  ggplot(mapping = aes(x = start_hour, y = no_of_rides)) +
+  geom_line() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  scale_x_continuous(n.breaks = 23) +
+  labs(title = "Average Number of CaBi Rides Across a Day in 2019 & 2020",
+       subtitle = "All Users",
+       x = "Hour of the Day",
+       y = "Average No. of Rides")
+
+# line graph of average number of rides across a day, members vs casuals
+rides_data_hours %>%
+  group_by(start_hour, member_type) %>% 
+  summarise(no_of_rides = n()/(2*days_in_a_year)) %>% 
+  ggplot(mapping = aes(x = start_hour, y = no_of_rides, 
+                       colour = member_type)) +
+  geom_line() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  labs(title = "Average Number of CaBi Rides in a Day in 2019 & 2020",
+       subtitle = "Members vs Casual Users",
+       x = "Hour of the Day",
+       y = "Average No. of Rides",
+       colour = "Member Type") +
+  scale_x_continuous(n.breaks = 23) +
+  annotate(geom = "curve", 
+           x = 4, 
+           y = 201, 
+           xend = 7.9, 
+           yend = 260,
+           curvature = -0.3, 
+           arrow = arrow(length = unit(2.5, "mm")),
+           alpha = 0.8,
+           colour = "dark green") +
+   annotate(geom = "text", 
+            x = 1, 
+            y = 175, 
+            label = "1st peak in member rides\nindicates morning rush hour",
+            hjust = 0.1, vjust = -0.1,
+            lineheight = 0.8,
+            colour = "dark green") + 
+  annotate(geom = "curve", 
+           x = 20, 
+           y = 295, 
+           xend = 17.1, 
+           yend = 302,
+           curvature = 0.3, 
+           arrow = arrow(length = unit(2.2, "mm")),
+           alpha = 0.8,
+           colour = "dark green") +
+  annotate(geom = "text", 
+            x = 18.3, 
+            y = 270, 
+            label = "2nd peak in member rides\nindicates evening rush hour",
+            hjust = 0.1, vjust = -0.1,
+            lineheight = 0.8,
+            colour = "dark green")
+
+```
+
+
+## Answer to Question 3
+
+**Did CaBi users, on average, increase the duration they rode for, across a day, depending on the month of the year between 2019 and 2020?**
+
+The first figure below shows us that the average duration of a rides across the day sat within a range of around 8 minutes to 14 minutes. It also shows us that the duration of rides tended to be longer in the summer months. This is likely due to the increase in temperature and sunny weather. This contrasts to the lower duration of rides, on average, in the winter months, likely due to the colder weather and less light hours. This finding is emphasized in the second and third figures. The second figure highlights the 4 months with the highest peak ride duration (April, May, June and July). Whilst the third figure highlights the 4 months with the lowest trough of ride duration (January, February, March, December).
+
+```{r}
+
+# creates a new tibble that creates 2 new columns, start hour and start month
+rides_data_hour_month <- rides_data %>% 
+  select(duration, start_date, end_date, member_type) %>% 
+  mutate(start_hour = as.integer(format(start_date, "%H"))) %>% 
+  mutate(start_month = as.factor(format(start_date, "%B"))) %>% 
+  mutate(start_month = factor(start_month, levels = month.name))
+
+seconds_in_a_min <- 60
+
+# mean duration of rides per hour of the day, coloured by months
+rides_data_hour_month %>%
+  group_by(start_hour, start_month) %>% 
+  summarise(mean_duration = mean(duration)/seconds_in_a_min) %>% 
+  ggplot(mapping = aes(x = start_hour, y = mean_duration, 
+                       colour = start_month)) +
+  geom_line() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  scale_y_continuous(limits = c(1, 15)) +
+  scale_x_continuous(n.breaks = 23) +
+  labs(title = "Average Duration of CaBi Rides Across a Day in 2019 & 2020",
+       subtitle = "All Months",
+       x = "Hour of the Day",
+       y = "Average Ride Duration (mins)",
+       colour = "Month")
+
+# mean duration of rides per hour of the day, faceted by top 4 months
+rides_data_hour_month %>%
+  group_by(start_hour, start_month) %>% 
+  summarise(mean_duration = mean(duration)/seconds_in_a_min) %>% 
+  ggplot(mapping = aes(x = start_hour, y = mean_duration, 
+                       colour = start_month)) +
+  geom_line() +
+  gghighlight(max(mean_duration) > 13.5, use_direct_label = FALSE) +
+  theme(legend.position = "none",
+        plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) + 
+  scale_y_continuous(limits = c(1, 15)) +
+  scale_x_continuous(n.breaks = 13) +
+  facet_wrap(~ start_month) +
+  labs(title = "Top Four Months",
+       x = "Hour of the Day",
+       y = "Average Ride Duration (mins)",
+       colour = "Month")
+
+# mean duration of rides per hour of the day, faceted by bottom 4 months
+rides_data_hour_month %>%
+  group_by(start_hour, start_month) %>% 
+  summarise(mean_duration = mean(duration)/seconds_in_a_min) %>% 
+  ggplot(mapping = aes(x = start_hour, y = mean_duration, 
+                       colour = start_month)) +
+  geom_line() +
+  gghighlight(max(mean_duration) < 12.9, use_direct_label = FALSE) +
+  theme(legend.position = "none",
+        plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) + 
+  scale_y_continuous(limits = c(1, 15)) +
+  scale_x_continuous(n.breaks = 13) +
+  facet_wrap(~ start_month) +
+  labs(title = "Bottom 4 Months",
+       x = "Hour of the Day",
+       y = "Average Ride Duration (mins)",
+       colour = "Month")
+
+```
+
+
+## Answer to Question 4
+
+**Did the first COVID-19 lockdown lower the use of CaBi bikes across the year 2020 compared with 2019?**
+
+The figure below displays a large reduction in the number of rides taken in 2020 compared with 2019. The key difference in the two lines (2019 and 2020) is the period of time before and after the first COVID-19 lockdown (30th March 2020, indicated by the blue line). As you can see in 2019 the number of rides taken increased a lot from February to April. In 2020 over this same time period the number of rides taken decreased a lot. A reason for the decrease in rides starting before the lockdown (January to March) may be due to people already beginning to stay at home because COVID-19 outbreaks were spreading across the globe at this point. The reason for the increase in rides very shortly after the the first lockdown could be a mixture of lockdown rules being lifted quickly and people becoming fed up of staying inside and disobeying the rules.
+
+```{r}
+
+# creates a new tibble that includes a column that rounds the start time 
+# of each ride to the nearest hour of the day
+rides_data_month_year <- rides_data %>%
+  select(start_date) %>% 
+  mutate(start_month = as.integer(format(start_date, "%m"))) %>%
+  mutate(start_year = as.integer(format(start_date, "%Y"))) %>% 
+  mutate(start_year = as.factor(start_year))
+
+# line graph of average number of rides across a year
+rides_data_month_year %>%
+  group_by(start_month, start_year) %>% 
+  summarise(no_of_rides = n()) %>% 
+  ggplot(mapping = aes(x = start_month, y = no_of_rides, 
+                       colour = start_year)) +
+  geom_line() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) +
+  labs(title = "Number of CaBi Rides Across 2019 & 2020",
+       x = "Month of the Year",
+       y = "Total No. of Rides",
+       colour = "Year") +
+  scale_x_continuous(n.breaks = 12) +
+  annotate(geom = "segment", 
+           x = 3.9, 
+           y = 0, 
+           xend = 3.9, 
+           yend = 170000,
+           colour = "blue", 
+           size = 1, 
+           alpha = 0.4) +
+  annotate(
+    geom = "text", 
+    x = 1.4, 
+    y = 20000, 
+    label = "the blue line\nindicates the first\nCOVID-19 lockdown\nin 2020",
+    hjust = 0, vjust = 0,
+    lineheight = 0.8,
+    colour = "blue")
+
+```
+
+
+## Answer to Question 5
+
+**Did the starting location (starting latitude and longitude) of CaBi users affect the duration of their journeys between 2019 and 2020?**
+
+The figure below displays the starting location of all the rides as if you were viewing it on a map. The shape underneath the points is Washington DC (aka the District of Columbia). The figure shows how CaBi bikes were not contained only within the city itself but they also expanded to the neighbouring states and districts. It is also clear that the duration of a ride did not depend on the starting location as the colour of the points are scattered randomly around the figure.
+
+For this analysis there were many missing latitude and longitude values. These rides were chosen to be discarded as the latitude and longitude information is not there so they could not be plotted in the figure.
+```{r}
+
+seconds_in_a_min <- 60
+
+# creates a 3 column tibble that removes the na's from latitude and longitude
+# the information is not there so I have chosen to discard these rows of data
+# I have also chosen to discard casual users
+# this reduces the data set to around 400000 observations
+rides_data_lat_lng <- rides_data %>%
+  filter(member_type == "member") %>% 
+  select(start_lng, start_lat, duration) %>%
+  mutate(duration = duration/seconds_in_a_min) %>% 
+  drop_na()
+
+
+# the following code creates a scatter plot of latitude and longitude
+# with duration colour mapping and with the map of Washington DC
+# in the background
+
+my_map_data <- map_data("county", region = c("district of columbia"))
+
+my_map <-
+  ggplot(my_map_data, aes(x = long, y = lat, group = group)) +
+  geom_polygon() +
+  scale_x_continuous(limits = c(-77.4,-76.8)) +
+  scale_y_continuous(limits = c(38.75, 39.15)) +
+  coord_map()
+
+my_map +
+  geom_point(data = rides_data_lat_lng,
+    mapping = aes(x = start_lng, y = start_lat,
+                  group = NULL, colour = duration)) +
+  scale_colour_viridis_c() +
+  labs(title = "Starting Location of CaBi Rides in 2019 and 2020 on a Map",
+       x = "Longitude",
+       y = "Latitude",
+       colour = "Ride Duration (mins)") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+```
+
+
+# Conclusion
+
+In summary, the results give a great deal of insight into the trends of CaBi bike users in 2019 & 2020. Firstly they highlighted the busiest stations, the busiest times of the day and also the busiest periods of the year. This information could allow local governing bodies to tailor specific infrastructure and traffic control to improve the CaBi service. The results also highlight how the CaBi scheme was affected by COVID-19 and that it stretches far across Washington DC and the neighbouring districts.
+
+This analysis has also ignited many more questions about CaBi bike users in 2019 & 2020. For example, why did the number of rides start to drop before the first COVID-19 lockdown? and why did the number of rides increase rapidly after it? In addition, to find out if the differences between groups were meaningful further statistical analysis could be performed. For example, was the average duration of rides in the summer months significantly higher than in the winter months?
