@@ -1,4 +1,4 @@
-# Intro-to-Data-Science-Coursework
+# Intro to Data Science Coursework
 
 This is a repo containing my submitted coursework for the first module on my Data Science Masters: Introduction to Data Science
 
