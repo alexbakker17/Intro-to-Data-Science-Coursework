@@ -1,6 +1,6 @@
 # Intro to Data Science Coursework
 
-This is a repo containing my submitted coursework for the first module on my Data Science Masters: Introduction to Data Science
+This is a repo containing my submitted coursework for the module Introduction to Data Science, on my Data Science MSc.
 
 The brief containes the information I was given about the task and the marking criteria.
 
